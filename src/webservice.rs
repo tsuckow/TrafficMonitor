@@ -1,17 +1,16 @@
 #![allow(unused_variables)]
 #![cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
 
-use env_logger;
 use actix;
 use bytes::Bytes;
+use env_logger;
 use futures::sync::mpsc;
 use futures::Stream;
 
 use actix_web::http::{header, Method, StatusCode};
 use actix_web::middleware::session::{self, RequestSession};
 use actix_web::{
-    error, fs, middleware, pred, server, App, Error, HttpRequest, HttpResponse, Path,
-    Result,
+    error, fs, middleware, pred, server, App, Error, HttpRequest, HttpResponse, Path, Result,
 };
 use futures::future::{result, FutureResult};
 use std::{env, io};
@@ -62,8 +61,7 @@ fn index_async_body(path: Path<String>) -> HttpResponse {
     let (tx, rx_body) = mpsc::unbounded();
     let _ = tx.unbounded_send(Bytes::from(text.as_bytes()));
 
-    HttpResponse::Ok()
-        .streaming(rx_body.map_err(|e| error::ErrorBadRequest("bad request")))
+    HttpResponse::Ok().streaming(rx_body.map_err(|e| error::ErrorBadRequest("bad request")))
 }
 
 /// handler with path parameters like `/user/{name}/`
@@ -81,13 +79,13 @@ pub fn main() {
     env_logger::init();
     let sys = actix::System::new("basic-example");
 
-    let addr = server::new(
-        || App::new()
+    let addr = server::new(|| {
+        App::new()
             // enable logger
             .middleware(middleware::Logger::default())
             // cookie session middleware
             .middleware(session::SessionStorage::new(
-                session::CookieSessionBackend::signed(&[0; 32]).secure(false)
+                session::CookieSessionBackend::signed(&[0; 32]).secure(false),
             ))
             // register favicon
             .resource("/favicon", |r| r.f(favicon))
@@ -98,40 +96,50 @@ pub fn main() {
             // async handler
             .resource("/async/{name}", |r| r.method(Method::GET).a(index_async))
             // async handler
-            .resource("/async-body/{name}", |r| r.method(Method::GET).with(index_async_body))
-            .resource("/test", |r| r.f(|req| {
-                match *req.method() {
+            .resource("/async-body/{name}", |r| {
+                r.method(Method::GET).with(index_async_body)
+            })
+            .resource("/test", |r| {
+                r.f(|req| match *req.method() {
                     Method::GET => HttpResponse::Ok(),
                     Method::POST => HttpResponse::MethodNotAllowed(),
                     _ => HttpResponse::NotFound(),
-                }
-            }))
-            .resource("/error", |r| r.f(|req| {
-                error::InternalError::new(
-                    io::Error::new(io::ErrorKind::Other, "test"), StatusCode::INTERNAL_SERVER_ERROR)
-            }))
+                })
+            })
+            .resource("/error", |r| {
+                r.f(|req| {
+                    error::InternalError::new(
+                        io::Error::new(io::ErrorKind::Other, "test"),
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                    )
+                })
+            })
             // static files
             .handler("/static", fs::StaticFiles::new("static").unwrap())
             // redirect
-            .resource("/", |r| r.method(Method::GET).f(|req| {
-                println!("{:?}", req);
-                HttpResponse::Found()
-                    .header(header::LOCATION, "static/index.html")
-                    .finish()
-            }))
+            .resource("/", |r| {
+                r.method(Method::GET).f(|req| {
+                    println!("{:?}", req);
+                    HttpResponse::Found()
+                        .header(header::LOCATION, "static/index.html")
+                        .finish()
+                })
+            })
             // default
             .default_resource(|r| {
                 // 404 for GET request
                 r.method(Method::GET).f(p404);
 
                 // all requests that are not `GET`
-                r.route().filter(pred::Not(pred::Get())).f(
-                    |req| HttpResponse::MethodNotAllowed());
-            }))
-
-        .bind("10.0.0.1:8080").expect("Can not bind to 10.0.0.1:8080")
-        .shutdown_timeout(0)    // <- Set shutdown timeout to 0 seconds (default 60s)
-        .start();
+                r.route()
+                    .filter(pred::Not(pred::Get()))
+                    .f(|req| HttpResponse::MethodNotAllowed());
+            })
+    })
+    .bind("10.0.0.1:8080")
+    .expect("Can not bind to 10.0.0.1:8080")
+    .shutdown_timeout(0) // <- Set shutdown timeout to 0 seconds (default 60s)
+    .start();
 
     println!("Starting http server: 10.0.0.1:8080");
     let _ = sys.run();
