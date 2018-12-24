@@ -1,8 +1,4 @@
-extern crate pcap;
-extern crate libc;
-extern crate packet;
-use self::pcap::{Capture};
-extern crate std;
+use pcap::{Capture};
 
 const RATE_INTERVAL_SECONDS:f64 = 10f64;
 const RATE_INTERVALS_LIMIT:usize = 6;
