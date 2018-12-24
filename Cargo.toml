@@ -1,0 +1,20 @@
+[package]
+name = "traffic_monitor"
+version = "0.1.0"
+authors = ["Thomas Suckow"]
+edition = "2018"
+
+[dependencies]
+pcap = "0.7.0"
+libc = "0.2.43"
+packet = "0.1.2"
+actix-web = "0.7.8"
+actix = "0.7.5"
+bytes = "0.4.10"
+futures = "0.1.25"
+env_logger = "0.5.13"
+tokio-signal = "0.2.7"
+
+[profile.release]
+#Link Time Optimization
+lto = true
