@@ -1,6 +1,8 @@
 use pcap::Capture;
 
-const RATE_INTERVAL_SECONDS: f64 = 10f64;
+use super::statistics;
+
+const RATE_INTERVAL_SECONDS: f64 = 2f64;
 const RATE_INTERVALS_LIMIT: usize = 6;
 
 struct PacketHandler {
@@ -71,7 +73,7 @@ impl PacketHandler {
     }
 }
 
-pub fn thread(tx: std::sync::mpsc::Sender<String>) -> Result<(), pcap::Error> {
+pub fn thread(tx: crossbeam_channel::Sender<statistics::Message>) -> Result<(), pcap::Error> {
     let inactive_capture = Capture::from_device("enp14s0")?;
     let mut cap = inactive_capture
         .promisc(true)
@@ -90,8 +92,15 @@ pub fn thread(tx: std::sync::mpsc::Sender<String>) -> Result<(), pcap::Error> {
             Err(error) => return Err(error),
         };
 
+        //tx.send(statistics::Message::GotPacket(statistics::PacketData { message: format!("Stats: {:?}", cap.stats())}));
+        tx.send(statistics::Message::GotPacket(statistics::PacketData {
+            packet_number: packet_number,
+        }));
+
         if did_rate {
-            println!("Stats: {:?}", cap.stats());
+            tx.send(statistics::Message::GotStatistics(cap.stats().unwrap()));
+            //tx.send(statistics::Message::GotPacket(statistics::PacketData { message: format!("Stats: {:?}", cap.stats())}));
+            //println!("Stats Periodic: {:?}", cap.stats());
         }
 
         packet_number += 1;

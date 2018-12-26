@@ -5,7 +5,8 @@ mod webservice;
 fn main() {
     println!("Starting Traffic Monitor...");
 
-    let (tx, rx) = std::sync::mpsc::channel();
+    //let (tx, rx) = std::sync::mpsc::sync_channel(5);
+    let (tx, rx) = crossbeam_channel::bounded(2);
 
     std::thread::spawn(move || {
         statistics::thread(rx).unwrap();
