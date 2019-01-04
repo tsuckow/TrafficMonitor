@@ -17,7 +17,7 @@ fn timeval_to_f64(timeval: libc::timeval) -> f64 {
 }
 
 impl PacketHandler {
-    fn handle_packet(&mut self, packet: pcap::Packet, packet_number: u64) -> bool {
+    fn handle_packet(&mut self, packet: &pcap::Packet, packet_number: u64) -> bool {
         let packet_size = packet.header.len as u64;
         let mut did_rate = false;
         let packet_seconds = timeval_to_f64(packet.header.ts);
@@ -87,14 +87,21 @@ pub fn thread(tx: crossbeam_channel::Sender<statistics::Message>) -> Result<(), 
     let mut packet_number = 0u64;
 
     loop {
-        let did_rate = match cap.next() {
-            Ok(packet) => handler.handle_packet(packet, packet_number),
+        let packet = match cap.next() {
+            Ok(packet) => packet,
             Err(error) => return Err(error),
         };
+
+        let did_rate = handler.handle_packet(&packet, packet_number);
+
+        //Fixme, deal with parse error
+        let parsed_packet = packet::ether::Packet::new(packet.data).unwrap();
 
         //tx.send(statistics::Message::GotPacket(statistics::PacketData { message: format!("Stats: {:?}", cap.stats())}));
         tx.send(statistics::Message::GotPacket(statistics::PacketData {
             packet_number: packet_number,
+            ethernet_destination: parsed_packet.destination(),
+            ethernet_source: parsed_packet.source(),
         }));
 
         if did_rate {
@@ -105,12 +112,6 @@ pub fn thread(tx: crossbeam_channel::Sender<statistics::Message>) -> Result<(), 
 
         packet_number += 1;
     }
-
-    // while let Ok(packet) = cap.next() {
-    //     println!("received packet! {:?}", packet.data.len());
-
-    //     println!("Stats: {:?}", cap.stats());
-    // }
 
     Ok(())
 }

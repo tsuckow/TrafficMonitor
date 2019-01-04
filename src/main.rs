@@ -7,6 +7,7 @@ fn main() {
 
     //let (tx, rx) = std::sync::mpsc::sync_channel(5);
     let (tx, rx) = crossbeam_channel::bounded(2);
+    let tx2 = tx.clone();
 
     std::thread::spawn(move || {
         statistics::thread(rx).unwrap();
@@ -16,5 +17,5 @@ fn main() {
         packet_reciever::thread(tx).unwrap();
     });
 
-    webservice::main();
+    webservice::thread(tx2);
 }

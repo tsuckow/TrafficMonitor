@@ -1,6 +1,8 @@
 #![allow(unused_variables)]
 #![cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
 
+use super::statistics;
+
 use actix;
 use bytes::Bytes;
 use env_logger;
@@ -10,18 +12,33 @@ use futures::Stream;
 use actix_web::http::{header, Method, StatusCode};
 use actix_web::middleware::session::{self, RequestSession};
 use actix_web::{
-    error, fs, middleware, pred, server, App, Error, HttpRequest, HttpResponse, Path, Result,
+    error, fs, middleware, pred, server, App, Error, FutureResponse, HttpRequest, HttpResponse,
+    Path, Result,
 };
-use futures::future::{result, FutureResult};
+use futures::future::{result, Future, FutureResult};
 use std::{env, io};
 
+struct AppState {
+    tx: crossbeam_channel::Sender<statistics::Message>,
+}
+
+fn fnonce_to_fn<T>(func: T) -> Box<dyn FnMut() + Send + 'static>
+where
+    T: FnOnce() + Send + 'static,
+{
+    let mut foo = Some(func);
+    Box::new(move || {
+        (foo.take().unwrap())();
+    })
+}
+
 /// favicon handler
-fn favicon(req: &HttpRequest) -> Result<fs::NamedFile> {
+fn favicon(req: &HttpRequest<AppState>) -> Result<fs::NamedFile> {
     Ok(fs::NamedFile::open("static/favicon.ico")?)
 }
 
 /// simple index handler
-fn welcome(req: &HttpRequest) -> Result<HttpResponse> {
+fn welcome(req: &HttpRequest<AppState>) -> Result<HttpResponse> {
     println!("{:?}", req);
 
     // session
@@ -41,17 +58,36 @@ fn welcome(req: &HttpRequest) -> Result<HttpResponse> {
 }
 
 /// 404 handler
-fn p404(req: &HttpRequest) -> Result<fs::NamedFile> {
+fn p404(req: &HttpRequest<AppState>) -> Result<fs::NamedFile> {
     Ok(fs::NamedFile::open("static/404.html")?.set_status_code(StatusCode::NOT_FOUND))
 }
 
 /// async handler
-fn index_async(req: &HttpRequest) -> FutureResult<HttpResponse, Error> {
+fn index_async(req: &HttpRequest<AppState>) -> FutureResult<HttpResponse, Error> {
     println!("{:?}", req);
 
     result(Ok(HttpResponse::Ok().content_type("text/html").body(
         format!("Hello {}!", req.match_info().get("name").unwrap()),
     )))
+}
+
+fn api_async(req: &HttpRequest<AppState>) -> FutureResponse<HttpResponse> {
+    //println!("{:?}", req);
+
+    let state = req.state();
+
+    let (sender, receiver) = futures::sync::oneshot::channel::<String>();
+
+    let func = fnonce_to_fn(move || {
+        sender.send("Sent".to_string());
+    });
+    state.tx.send(statistics::Message::GetString(func));
+
+    Box::new(
+        receiver
+            .map_err(Error::from)
+            .map(|s| HttpResponse::Ok().content_type("text/html").body(s)),
+    )
 }
 
 /// async body
@@ -65,7 +101,7 @@ fn index_async_body(path: Path<String>) -> HttpResponse {
 }
 
 /// handler with path parameters like `/user/{name}/`
-fn with_param(req: &HttpRequest) -> HttpResponse {
+fn with_param(req: &HttpRequest<AppState>) -> HttpResponse {
     println!("{:?}", req);
 
     HttpResponse::Ok()
@@ -73,20 +109,22 @@ fn with_param(req: &HttpRequest) -> HttpResponse {
         .body(format!("Hello {}!", req.match_info().get("name").unwrap()))
 }
 
-pub fn main() {
+pub fn thread(tx: crossbeam_channel::Sender<statistics::Message>) {
     env::set_var("RUST_LOG", "actix_web=debug");
     env::set_var("RUST_BACKTRACE", "1");
     env_logger::init();
     let sys = actix::System::new("basic-example");
 
-    let addr = server::new(|| {
-        App::new()
+    let addr = server::new(move || {
+        let state = AppState { tx: tx.clone() };
+        App::with_state(state)
             // enable logger
             .middleware(middleware::Logger::default())
             // cookie session middleware
             .middleware(session::SessionStorage::new(
                 session::CookieSessionBackend::signed(&[0; 32]).secure(false),
             ))
+            .resource("/api", |r| r.method(Method::GET).a(api_async))
             // register favicon
             .resource("/favicon", |r| r.f(favicon))
             // register simple route, handle all methods

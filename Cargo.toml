@@ -15,6 +15,7 @@ futures = "0.1.25"
 env_logger = "0.5.13"
 tokio-signal = "0.2.7"
 crossbeam-channel = "0.3.4"
+hwaddr = "0.1.5"
 
 [profile.release]
 #Link Time Optimization
