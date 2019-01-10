@@ -3,6 +3,8 @@
 
 use super::statistics;
 
+use serde_derive::Serialize;
+
 use actix;
 use bytes::Bytes;
 use env_logger;
@@ -13,7 +15,7 @@ use actix_web::http::{header, Method, StatusCode};
 use actix_web::middleware::session::{self, RequestSession};
 use actix_web::{
     error, fs, middleware, pred, server, App, Error, FutureResponse, HttpRequest, HttpResponse,
-    Path, Result,
+    Path, Result, Json
 };
 use futures::future::{result, Future, FutureResult};
 use std::{env, io};
@@ -22,13 +24,13 @@ struct AppState {
     tx: crossbeam_channel::Sender<statistics::Message>,
 }
 
-fn fnonce_to_fn<T>(func: T) -> Box<dyn FnMut() + Send + 'static>
+fn fnonce_to_fn<T, A>(func: T) -> Box<dyn FnMut(A) + Send + 'static>
 where
-    T: FnOnce() + Send + 'static,
+    T: FnOnce(A) + Send + 'static,
 {
     let mut foo = Some(func);
-    Box::new(move || {
-        (foo.take().unwrap())();
+    Box::new(move |a: A| {
+        (foo.take().unwrap())(a);
     })
 }
 
@@ -76,17 +78,24 @@ fn api_async(req: &HttpRequest<AppState>) -> FutureResponse<HttpResponse> {
 
     let state = req.state();
 
-    let (sender, receiver) = futures::sync::oneshot::channel::<String>();
+    let (sender, receiver) = futures::sync::oneshot::channel::<statistics::Bitrates>();
 
-    let func = fnonce_to_fn(move || {
-        sender.send("Sent".to_string());
+    let callback = fnonce_to_fn(move |s:statistics::Bitrates| {
+        sender.send(s);
     });
-    state.tx.send(statistics::Message::GetString(func));
+    state.tx.send(statistics::Message::GetBitrate(callback));
+
+    #[derive(Serialize)]
+    struct Object {
+        avg_bytes_per_second: u64,
+        last_second_bytes: u64,
+    }
 
     Box::new(
         receiver
             .map_err(Error::from)
-            .map(|s| HttpResponse::Ok().content_type("text/html").body(s)),
+            .map(|bitrates| Object { avg_bytes_per_second: bitrates.avg_bytes_per_second, last_second_bytes: bitrates.seconds_rates[1] })
+            .map(|s| HttpResponse::Ok().json(s)),
     )
 }
 
@@ -153,16 +162,17 @@ pub fn thread(tx: crossbeam_channel::Sender<statistics::Message>) {
                 })
             })
             // static files
-            .handler("/static", fs::StaticFiles::new("static").unwrap())
+            
             // redirect
             .resource("/", |r| {
                 r.method(Method::GET).f(|req| {
                     println!("{:?}", req);
                     HttpResponse::Found()
-                        .header(header::LOCATION, "static/index.html")
+                        .header(header::LOCATION, "index.html")
                         .finish()
                 })
             })
+            .handler("/", fs::StaticFiles::new("static").unwrap())
             // default
             .default_resource(|r| {
                 // 404 for GET request
@@ -175,7 +185,8 @@ pub fn thread(tx: crossbeam_channel::Sender<statistics::Message>) {
             })
     })
     .bind("10.0.0.1:8080")
-    .expect("Can not bind to 10.0.0.1:8080")
+    .and_then(|s| s.bind("192.168.4.1:8080"))
+    .expect("Can not bind to 10.0.0.1:8080 or 192.168.4.1:8080")
     .shutdown_timeout(0) // <- Set shutdown timeout to 0 seconds (default 60s)
     .start();
 

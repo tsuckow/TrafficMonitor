@@ -1,0 +1,27 @@
+{
+  "name": "traffic-monitor",
+  "version": "1.0.0",
+  "description": "Monitors traffic passing through this system",
+  "main": "index.js",
+  "scripts": {
+    "watch": "webpack --mode development --watch --devtool sourcemap",
+    "build": "webpack --mode production"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "webpack": "^4.0.1",
+    "webpack-cli": "^3.2.0"
+  },
+  "dependencies": {
+    "@babel/core": "^7.2.2",
+    "@babel/preset-env": "^7.2.3",
+    "@babel/preset-react": "^7.0.0",
+    "babel-loader": "^8.0.5",
+    "babel-plugin-styled-components": "^1.10.0",
+    "react": "^16.7.0",
+    "react-dom": "^16.7.0",
+    "restful-react": "^7.1.0",
+    "styled-components": "^4.1.3"
+  }
+}

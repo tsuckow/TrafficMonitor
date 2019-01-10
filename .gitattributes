@@ -1,0 +1,12 @@
+* text=auto
+
+## SOURCE CODE
+*.htm     text eol=lf
+*.html    text eol=lf
+*.js      text eol=lf
+*.json    text eol=lf
+
+*.rs      text eol=lf
+*.toml    text eol=lf
+
+*.md      text eol=lf

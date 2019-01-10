@@ -1,3 +1,7 @@
 /target/
+static/bundled.js*
+
 **/*.rs.bk
-/node_modules/
+
+node_modules/
+npm-debug.log

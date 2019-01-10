@@ -16,6 +16,8 @@ env_logger = "0.5.13"
 tokio-signal = "0.2.7"
 crossbeam-channel = "0.3.4"
 hwaddr = "0.1.5"
+serde_derive = "1.0.84"
+serde = "1.0.84"
 
 [profile.release]
 #Link Time Optimization
